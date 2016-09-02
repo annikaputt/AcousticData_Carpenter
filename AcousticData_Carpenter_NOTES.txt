@@ -1,0 +1,10 @@
+############################
+# AcousticData_Carpenter_NOTES.R
+# AcousticData_Carpenter.Rproj
+# Created August 28, 2015
+# A Putt
+#############################
+
+This file uploads raw VR2W files and plots the detections as a time series plot. The upload file uploads all of the data and formats the dates. The VR2Ws record date in UTC, so I've also converted to PDT and have separated each date into day, month, and year. The dates are very memory-heavy right now because there are a lot of data and the dates take up a lot of space. This will probably have to be adjusted in the near future to improve computing time.
+
+I'm pretty sure all of the times are in UTC. The receivers are constantly recording in UTC but it is possible to convert to another time zone when you offload. I think it's best for me to offload in UTC and change in R.
