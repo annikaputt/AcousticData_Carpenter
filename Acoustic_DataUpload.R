@@ -14,6 +14,10 @@
 # A Putt
 #############################
 
+source("Acoustic_LoadLibraries.R")
+source("Acoustic_LiveDead.R")
+
+
 # Upload all csv files from the Acoustic_DataUpload folder
 file_path  <- list.files(path="Acoustic_DataUpload", pattern="*.csv") # Pull all files
 file_names <- substr(file_path,start=1,stop=22) # Pull the file names without .csv
@@ -35,15 +39,25 @@ acoustic <- acoustic[,1:3]
 # Create columns (as factors) with time information that takes up less memory than the date columns
 # May be useful for plotting or analysis later on
 names(acoustic)[1]   <- "fulldateUTC"
-acoustic$fulldateUTC <- as.POSIXct(acoustic$fulldateUTC,tz="UTC")
-acoustic$fulldatePDT <- as.POSIXlt(format(acoustic$fulldateUTC,tz="America/Los_Angeles",usetz=TRUE)) # convert to PDT
-acoustic$fulldateUTC <- as.POSIXlt(acoustic$fulldateUTC)
-acoustic$utcyear     <- as.factor(format(acoustic$fulldateUTC,"%Y"))
-acoustic$utcmonth    <- as.factor(format(acoustic$fulldateUTC,"%m"))
-acoustic$utcday      <- as.factor(format(acoustic$fulldateUTC,"%d"))
-acoustic$pdtyear     <- as.factor(format(acoustic$fulldatePDT,"%Y"))
-acoustic$pdtmonth    <- as.factor(format(acoustic$fulldatePDT,"%m"))
-acoustic$pdtday      <- as.factor(format(acoustic$fulldatePDT,"%d"))
+acoustic$fulldateUTC <- ymd_hms(acoustic$fulldateUTC,tz="UTC")
+acoustic$fulldatePDT <- with_tz(acoustic$fulldateUTC,tz="America/Los_Angeles") # convert to PDT
+# acoustic$fulldateUTC <- as.POSIXlt(acoustic$fulldateUTC)
+
+###########################
+# Remove False Detections #
+###########################
+
+# There are a bunch of codes that don't belong to tags that I implanted
+# All tags that I implanted are in the TagLife table that I upload in the Acoustic_LiveDead.R file
+TransmitterList <- levels(TagLife$Transmitters)
+
+# Pull out the false detections
+# This will also get rid of the test tag (A69-1601-58082) because it's not in the TagLife table
+FalseDetections <- subset(acoustic, !Transmitter %in% TransmitterList)
+
+# Remove false detections by only selecting Trasmitters that appear in the TagLife table
+acoustic <- subset(acoustic, Transmitter %in% TransmitterList)
+acoustic$Transmitter <- factor(acoustic$Transmitter) # Drop the unused factor levels
 
 ##########################
 # Define Gate Names ######
@@ -59,3 +73,36 @@ Gates <- data.frame(Receiver=c("VR2W-127257","VR2W-127260","VR2W-127258","VR2W-1
 acoustic.temp <- merge(acoustic,Gates,by="Receiver")
 if ( nrow(acoustic)!=nrow(acoustic.temp) ) "Merge failed" # Double check to make sure the merge worked properly
 acoustic <- acoustic.temp
+
+#####################################
+# Get rid of duplicate lines ########
+#####################################
+
+# Mulitple receivers pick up the same signal
+# To reduce the amount of data we can get rid of the duplicates as long as we retain one of the receivers for each gate
+# Actually still a ton of duplicate values based on dd,mm,yy, hh,mm i.e., only the seconds are different
+# I'll leave those in for now
+
+# Show the duplicated values
+duplicatedValues <- acoustic[duplicated(acoustic[,2:5]),]
+duplicatedValues <- duplicatedValues[order(duplicatedValues$fulldatePDT),]
+
+# Remove the duplicate values
+acoustic <- acoustic[!duplicated(acoustic[,2:5]),]
+acoustic <- acoustic[order(acoustic$fulldatePDT),]
+
+######################################
+# Create an excel file for each fish #
+######################################
+
+for (i in 1:length(levels(acoustic$Transmitter))) {
+  temp <- subset(acoustic,Transmitter==levels(acoustic$Transmitter)[i])
+  name <- as.character(temp$Transmitter[1])
+  temp$fulldatePDT <- as.character(temp$fulldatePDT)
+  temp$fulldateUTC <- as.character(temp$fulldateUTC)
+  write.csv(temp,sprintf("Acoustic_RawTransmitterData/%s.csv",name),row.names=FALSE)
+}
+
+# Also write the acoustic data to csv so that the upload file doesn't need to run each time
+write.csv(acoustic,"Acoustic_RawTransmitterData/fullacoustic.csv",row.names=FALSE)
+                         
